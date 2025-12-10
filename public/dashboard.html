@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - AuthGuard</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <nav>
+            <h1>AuthGuard</h1>
+            <div>
+                <span id="username"></span>
+                <button onclick="logout()">Sair</button>
+            </div>
+        </nav>
+        
+        <div class="content">
+            <div class="header">
+                <h2>Meus Projetos</h2>
+                <button onclick="showCreateProject()">+ Novo Projeto</button>
+            </div>
+            
+            <div id="projects"></div>
+            
+            <div id="selectedProject" style="display: none;">
+                <h3 id="projectName"></h3>
+                <div class="header">
+                    <h4>Keys</h4>
+                    <button onclick="showGenerateKey()">+ Gerar Key</button>
+                </div>
+                <div id="keys"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Criar Projeto -->
+    <div id="modalProject" class="modal">
+        <div class="modal-content">
+            <h3>Criar Projeto</h3>
+            <input type="text" id="projectName" placeholder="Nome do projeto">
+            <textarea id="projectDesc" placeholder="Descrição (opcional)"></textarea>
+            <button onclick="createProject()">Criar</button>
+            <button onclick="closeModal('modalProject')">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal Gerar Key -->
+    <div id="modalKey" class="modal">
+        <div class="modal-content">
+            <h3>Gerar Key</h3>
+            <input type="number" id="keyDuration" placeholder="Duração (dias, 0 = lifetime)">
+            <input type="text" id="keyNote" placeholder="Nota (opcional)">
+            <button onclick="generateKey()">Gerar</button>
+            <button onclick="closeModal('modalKey')">Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        let token = localStorage.getItem('token');
+        let currentProjectId = null;
+
+        if (!token) {
+            window.location.href = '/';
+        }
+
+        async function loadUser() {
+            const res = await fetch('/api/auth/me', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('username').textContent = data.user.username;
+            }
+        }
+
+        async function loadProjects() {
+            const res = await fetch('/api/projects/list', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                const html = data.projects.map(p => `
+                    <div class="project-card" onclick="selectProject('${p._id}', '${p.name}')">
+                        <h3>${p.name}</h3>
+                        <p>${p.description || 'Sem descrição'}</p>
+                        <div class="stats">
+                            <span>Keys: ${p.stats.totalKeys}</span>
+                            <span>Validações: ${p.stats.totalValidations}</span>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('projects').innerHTML = html;
+            }
+        }
+
+        async function selectProject(id, name) {
+            currentProjectId = id;
+            document.getElementById('projectName').textContent = name;
+            document.getElementById('selectedProject').style.display = 'block';
+            loadKeys();
+        }
+
+        async function loadKeys() {
+            const res = await fetch(`/api/keys/list?projectId=${currentProjectId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                const html = data.keys.map(k => `
+                    <div class="key-card">
+                        <code>${k.key}</code>
+                        <span class="status ${k.status}">${k.status}</span>
+                        <p>HWID: ${k.hwid || 'Não vinculado'}</p>
+                        <p>Expira: ${k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : 'Lifetime'}</p>
+                        <div class="actions">
+                            <button onclick="resetHwid('${k._id}')">Reset HWID</button>
+                            <button onclick="deleteKey('${k._id}')" class="danger">Deletar</button>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('keys').innerHTML = html;
+            }
+        }
+
+        function showCreateProject() {
+            document.getElementById('modalProject').style.display = 'flex';
+        }
+
+        function showGenerateKey() {
+            document.getElementById('modalKey').style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        async function createProject() {
+            const name = document.getElementById('projectName').value;
+            const description = document.getElementById('projectDesc').value;
+            
+            const res = await fetch('/api/projects/create', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name, description })
+            });
+            
+            if (res.ok) {
+                closeModal('modalProject');
+                loadProjects();
+            }
+        }
+
+        async function generateKey() {
+            const duration = document.getElementById('keyDuration').value;
+            const customerNote = document.getElementById('keyNote').value;
+            
+            const res = await fetch('/api/keys/generate', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ projectId: currentProjectId, duration, customerNote })
+            });
+            
+            if (res.ok) {
+                closeModal('modalKey');
+                loadKeys();
+            }
+        }
+
+        async function resetHwid(keyId) {
+            if (!confirm('Resetar HWID desta key?')) return;
+            
+            await fetch('/api/keys/reset-hwid', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ keyId })
+            });
+            
+            loadKeys();
+        }
+
+        async function deleteKey(keyId) {
+            if (!confirm('Deletar esta key?')) return;
+            
+            await fetch('/api/keys/delete', {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ keyId })
+            });
+            
+            loadKeys();
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/';
+        }
+
+        loadUser();
+        loadProjects();
+    </script>
+</body>
+</html>

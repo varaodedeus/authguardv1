@@ -3,37 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - AuthGuard</title>
+    <title>Registrar - AuthGuard</title>
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <div class="container">
         <div class="form-box">
             <h1>AuthGuard</h1>
-            <h2>Login</h2>
-            <form id="loginForm">
+            <h2>Criar Conta</h2>
+            <form id="registerForm">
                 <input type="text" id="username" placeholder="Username" required>
-                <input type="password" id="password" placeholder="Senha" required>
-                <button type="submit">Entrar</button>
+                <input type="email" id="email" placeholder="Email" required>
+                <input type="password" id="password" placeholder="Senha (mín. 6 caracteres)" required>
+                <button type="submit">Registrar</button>
                 <p class="error" id="error"></p>
             </form>
-            <p>Não tem conta? <a href="/register">Registrar</a></p>
+            <p>Já tem conta? <a href="/">Login</a></p>
         </div>
     </div>
 
     <script>
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const errorEl = document.getElementById('error');
             
             try {
-                const res = await fetch('/api/auth/login', {
+                const res = await fetch('/api/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, email, password })
                 });
                 
                 const data = await res.json();
@@ -45,7 +47,7 @@
                     errorEl.textContent = data.error;
                 }
             } catch (error) {
-                errorEl.textContent = 'Erro ao fazer login';
+                errorEl.textContent = 'Erro ao criar conta';
             }
         });
     </script>
